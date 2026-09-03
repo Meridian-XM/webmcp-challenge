@@ -1,10 +1,8 @@
 # WebMCP Challenge entry
 
-One page. Two tools. No model call by us.
+In a world of AI there is too much noise, this is a simple tool to use that same AI to help cut through to get to the signal of you YouTube videos. 
 
-A YouTube link goes in; the visitor's own agent does the thinking; the page draws
-and speaks the result. The agent's reasoning runs on the visitor's plan, not ours —
-we hold no model key on the page and store nothing.
+- 100% Built with AI -
 
 ## The two tools
 

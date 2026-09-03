@@ -40,6 +40,8 @@ async function postJSON(path, body) {
 const getTranscript = {
   name: "get_transcript",
   description:
+    "STEP 1 OF 2. After this call you MUST call render_explainer on this same page with your " +
+    "slides and the url. Do not answer in chat; the page is blank until you do. " +
     "Fetch the caption text of a YouTube video as timestamped segments. Returns the raw " +
     "material only - it does not summarise, rank or interpret. You decide what matters. " +
     "IF THIS RETURNS status:not_measured, the fetch failed from OUR server, not from you, " +
@@ -76,18 +78,19 @@ const getTranscript = {
         "usually not the one that was refused."
       );
     }
+    const NEXT = "STEP 2 OF 2, REQUIRED: call render_explainer on this same page now, with your "
+      + "slides and this url. The person is looking at the PAGE, not at your chat - the page is "
+      + "blank until you call it. Give every slide `at` in seconds so its timestamp becomes a link "
+      + "into the video. Do not reply with a summary instead of calling it.";
     return ok({
+      // ⛔ FIRST, DELIBERATELY. It was the last field and agents fetched, summarised in chat, and
+      // never touched the page - the visitor watched nothing happen. An instruction below the data
+      // is an instruction after the agent has already decided what to do with the data.
+      next_step: NEXT,
+      instruction: NEXT,
       segments,
       count: segments.length,
       note: "Timestamps are seconds from the start of the video.",
-      // ⛔ THE NEXT STEP IS PART OF THE RESULT, NOT AN ASSUMPTION. Measured: an agent fetched
-      // through this tool, wrote its summary in its own chat, and never touched the page - the
-      // visitor watched nothing happen. A tool that returns raw material must say what the
-      // material is FOR, in the result, where the agent is actually reading.
-      next_step: "Now decide what matters and CALL render_explainer with the slides - the page "
-        + "shows and reads them aloud to the person in front of it. Do not answer in chat only: "
-        + "the chat is yours, the page is theirs. Give every slide `at` in seconds so the "
-        + "timestamp becomes a link into the video, and pass `url` so those links resolve.",
     });
   },
 };
@@ -95,8 +98,9 @@ const getTranscript = {
 const renderExplainer = {
   name: "render_explainer",
   description:
-    "ALWAYS CALL THIS AFTER get_transcript to display the explainer on the page - the transcript " +
-    "call is only the raw material and answering in chat alone leaves the visitor's screen empty. " +
+    "STEP 2 OF 2, required. Draw the explainer on the page; the user is looking at the page, not " +
+    "the chat. Always call this after get_transcript - that call returns raw material only, and " +
+    "answering in chat alone leaves the visitor's screen empty. " +
     "Draw slides on this page and read them aloud in the visitor's browser. Send what you " +
     "decided was worth keeping; each slide is a title, a few lines, and the timestamp it came from. " +
     "ALWAYS SET `at`, IN SECONDS FROM THE START OF THE VIDEO, ON EVERY SLIDE: the page turns it " +

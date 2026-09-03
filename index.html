@@ -503,7 +503,7 @@ async function ttsWait(text, onProgress) {
     const waited = Date.now() - t0;
     if (waited > WFY_TTS_TIMEOUT_MS) return null;
     onProgress(Math.min(95, (waited / WFY_TTS_TIMEOUT_MS) * 100),
-               `generating audio - about ${Math.max(1, Math.round((WFY_TTS_TIMEOUT_MS - waited) / 1000))}s left`);
+               `fetching the natural voice - about ${Math.max(1, Math.round((WFY_TTS_TIMEOUT_MS - waited) / 1000))}s left`);
     await new Promise((res) => { WFY_ntimer = setTimeout(res, 2000); });
     if (WFY_nstop) return null;
     j = await ttsFetch(text);
@@ -562,7 +562,7 @@ async function WFY_neuralPlay(startSlide) {
     if (!text) continue;
     WFY_highlight(WFY_nslide);
     setSt(`${WFY_nslide + 1} of ${WFY_slideTexts.length} - neural`);
-    if (!WFY_pending[WFY_nslide]) loadBar(true, 3, "generating audio...");
+    if (!WFY_pending[WFY_nslide]) loadBar(true, 3, "fetching the natural voice...");
     let url = null;
     try {
       url = await WFY_renderAudio(WFY_nslide);

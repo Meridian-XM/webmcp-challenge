@@ -154,7 +154,7 @@
        <code>chrome://flags/#enable-webmcp-testing</code>, tools under DevTools &rsaquo; Application
        &rsaquo; WebMCP; tested on stable Chrome 152.</p>
     <p id="mc"></p>
-    <details class="paste" id="pastebox">
+    <details class="paste" id="pastebox" hidden>
       <summary>No WebMCP in your browser? Paste your slides here as JSON and press Render.</summary>
       <textarea id="pastein" rows="6" spellcheck="false" aria-label="Slides JSON"
         placeholder='{"url":"https://www.youtube.com/watch?v=VIDEO_ID","slides":[{"title":"What it does","lines":["One sentence.","Another."],"at":42},{"title":"Why it matters","lines":["A point."],"at":118}]}
@@ -249,7 +249,7 @@ let WFY_slideTexts = [];              // per SLIDE, not per chunk: one render jo
 function showVoice() {
   const el = document.getElementById("rab-voice");
   if (!el) return;
-  const vs = ("speechSynthesis" in window) ? speechSynthesis.getVoices() : [];
+  const vs = (!!window.speechSynthesis) ? speechSynthesis.getVoices() : [];
   const en = vs.filter((v) => /^en/i.test(v.lang));
   const list = en.length ? en : vs;
   // ⛔ NEVER DISABLED, AND THIS IS THE WHOLE POINT OF THE ENTRY. An earlier version disabled the
@@ -331,7 +331,7 @@ const VOICE_ORDER = [
 // freeze - the guard meant to protect the pick is what made it permanent.
 function pickVoice() {
   if (WFY_voiceLocked) { showVoice(); return; }   // a human chose; leave it alone
-  if (!("speechSynthesis" in window)) { showVoice(); return; }
+  if (!(!!window.speechSynthesis)) { showVoice(); return; }
   const vs = speechSynthesis.getVoices();
   // Empty is not "no voices" - the list has not filled yet. Report it, do not resolve it.
   if (!vs.length) { WFY_voice = null; showVoice(); return; }
@@ -343,13 +343,13 @@ function pickVoice() {
   if (!WFY_voice) WFY_voice = vs.find((x) => x.default) || vs[0];
   showVoice();
 }
-if ("speechSynthesis" in window) {
+if (!!window.speechSynthesis) {
   pickVoice();
   speechSynthesis.addEventListener("voiceschanged", pickVoice);
 }
 
 window.WFY_speak = (slides) => {
-  if (!("speechSynthesis" in window)) throw new Error("speechSynthesis unavailable");
+  if (!(!!window.speechSynthesis)) throw new Error("speechSynthesis unavailable");
   WFY_stopping = true; speechSynthesis.cancel(); WFY_stopping = false;
   WFY_queue = []; WFY_i = 0;
   WFY_slideTexts = [];
@@ -578,7 +578,7 @@ $("rab-play").onclick = () => {
     // ⛔ THE PRESS MUST NEVER BE SILENT. Every branch above assumes a queue; with none, the old
     // handler fell off the end and the button "did nothing" - indistinguishable, to the person
     // pressing it, from a broken page. Say which of the two it is.
-    setSt(("speechSynthesis" in window) ? "nothing to read yet" : "no speech in this browser");
+    setSt((!!window.speechSynthesis) ? "nothing to read yet" : "no speech in this browser");
   }
 };
 
@@ -680,15 +680,29 @@ $("pasterender").onclick = () => {
   }
   const bad = slides.findIndex((s) => !s || typeof s.title !== "string");
   if (bad !== -1) { msg.textContent = `slide ${bad + 1} has no string title`; return; }
+  // ⛔ TWO CALLS, TWO try BLOCKS, AND THAT SEPARATION IS THE WHOLE POINT. Drawing and speaking fail
+  // for different reasons and only one of them is a failure to draw. With both under one catch, a
+  // browser without speechSynthesis rendered the slides successfully and was then told "could not
+  // draw" - the success line was unreachable and the message asserted a failure that had not
+  // happened, to the audience this box exists for. `render_explainer` already had it right:
+  // "Speech is a bonus, never the verdict."
+  let n;
   try {
-    const n = window.WFY_render(slides, url || window.WFY_lastUrl);
-    window.WFY_speak(slides);
-    msg.textContent = `${n} slide${n === 1 ? "" : "s"} drawn - press play`;
+    n = window.WFY_render(slides, url || window.WFY_lastUrl);
   } catch (e) {
     // ⛔ NEVER SILENT. This box exists because something else failed; failing quietly here would
     // leave the agent with no way to tell a bad paste from a broken page.
     msg.textContent = `could not draw: ${e && e.message}`;
+    return;
   }
+  let spoken = "";
+  try {
+    window.WFY_speak(slides);
+  } catch (e) {
+    // Drawn is drawn. Say what happened to the speech rather than retracting the render.
+    spoken = ` (no speech in this browser: ${e && e.message})`;
+  }
+  msg.textContent = `${n} slide${n === 1 ? "" : "s"} drawn - press play${spoken}`;
 };
 
 $("copy").onclick = async () => {
@@ -712,5 +726,13 @@ registerWithRetry((reg) => {
   $("mc").textContent = reg.registered
     ? `${reg.registered} tools registered with your agent, via ${reg.where}.`
     : `No agent detected in this tab — ${reg.reason}.`;
+  // ⛔ THE PASTE BOX IS FOR BROWSERS THAT CANNOT CALL THE TOOLS, AND ONLY THOSE. Where the tools
+  // registered it is REMOVED from the document, not merely hidden: an agent that can call
+  // render_explainer must never be offered a second, worse way to do the same thing, and a
+  // hidden element is still in the DOM for anything reading the page rather than looking at it.
+  const box = document.getElementById("pastebox");
+  if (!box) return;
+  if (reg.registered) box.remove();
+  else box.hidden = false;
 });
 </script>

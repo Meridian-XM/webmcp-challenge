@@ -42,14 +42,14 @@ const getTranscript = {
   description:
     "STEP 1 OF 2. After this call you MUST call render_explainer on this same page with your " +
     "slides and the url. Do not answer in chat; the page is blank until you do. " +
-    "IF YOUR BROWSER HAS NO WebMCP CLIENT and you cannot call render_explainer, paste your " +
-    "slides JSON into the Render box on the page and press Render - it does the same thing. " +
     "Fetch the caption text of a YouTube video as timestamped segments. Returns the raw " +
     "material only - it does not summarise, rank or interpret. You decide what matters. " +
     "IF THIS RETURNS status:not_measured, the fetch failed from OUR server, not from you, " +
     "and the video is usually still readable from where you are: open the video in your own " +
     "browser, use Show transcript under the description, read it there, then call " +
-    "render_explainer with what matters.",
+    "render_explainer with what matters. " +
+    "Only if this browser has no WebMCP client at all: paste your slides JSON into the Render " +
+    "box on the page and press Render.",
   inputSchema: {
     type: "object",
     properties: {
@@ -83,10 +83,9 @@ const getTranscript = {
     const NEXT = "STEP 2 OF 2, REQUIRED: call render_explainer on this same page now, with your "
       + "slides and this url. The person is looking at the PAGE, not at your chat - the page is "
       + "blank until you call it. Give every slide `at` in seconds so its timestamp becomes a link "
-      + "into the video. Do not reply with a summary instead of calling it. IF YOU CANNOT CALL "
-      + "render_explainer (no WebMCP client in this browser), paste this JSON into the Render box "
-      + "on the page and press Render: {\"url\":\"<the video url>\",\"slides\":[{\"title\":"
-      + "\"...\",\"lines\":[\"...\"],\"at\":<seconds>}]}";
+      + "into the video. Do not reply with a summary instead of calling it. "
+      + "Only if this browser has no WebMCP client at all: paste your slides JSON into the Render "
+      + "box on the page instead.";
     return ok({
       // ⛔ FIRST, DELIBERATELY. It was the last field and agents fetched, summarised in chat, and
       // never touched the page - the visitor watched nothing happen. An instruction below the data

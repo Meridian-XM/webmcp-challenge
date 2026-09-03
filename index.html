@@ -650,6 +650,7 @@ $("f").onsubmit = async (e) => {
     const d = await res.json();
     // THREE STATES. `not_measured` is not a failure and not an empty transcript.
     if (d.status === "ok") {
+      window.WFY_transcriptArrived();
       say(`${d.count} caption segments ready${d.title ? ` — ${d.title}` : ""}. `
         + `Ask your agent to explain it, or it can call get_transcript itself.`);
     } else if (d.status === "empty") {
@@ -734,13 +735,31 @@ registerWithRetry((reg) => {
   $("mc").textContent = reg.registered
     ? `${reg.registered} tools registered with your agent, via ${reg.where}.`
     : `No agent detected in this tab — ${reg.reason}.`;
-  // ⛔ THE PASTE BOX IS FOR BROWSERS THAT CANNOT CALL THE TOOLS, AND ONLY THOSE. Where the tools
-  // registered it is REMOVED from the document, not merely hidden: an agent that can call
-  // render_explainer must never be offered a second, worse way to do the same thing, and a
-  // hidden element is still in the DOM for anything reading the page rather than looking at it.
-  const box = document.getElementById("pastebox");
-  if (!box) return;
-  if (reg.registered) box.remove();
-  else box.hidden = false;
 });
+
+// ⛔ THE BOX IS GATED ON BEHAVIOUR, NOT ON REGISTRATION, AND THAT DISTINCTION IS THE WHOLE FIX.
+// It used to be REMOVED whenever `registered` was truthy - but `registered` only means
+// `document.modelContext` existed and `registerTool` did not throw. That is a PAGE-side fact and
+// it is NOT evidence the agent can invoke anything. Measured in a real in-app browser: the page
+// reported two tools registered while the agent's own probe saw none and could not call them - so
+// the old gate deleted the fallback in exactly the browser the fallback exists for.
+// The observable that actually separates the two is what the agent DOES: a transcript arrives and
+// then a render either follows or it does not.
+const FALLBACK_WAIT_MS = 15000;
+let WFY_offerTimer = null;
+
+window.WFY_transcriptArrived = () => {
+  if (WFY_offerTimer) clearTimeout(WFY_offerTimer);
+  WFY_offerTimer = setTimeout(() => {
+    const box = document.getElementById("pastebox");
+    if (box) box.hidden = false;
+  }, FALLBACK_WAIT_MS);
+};
+
+// Any render at all cancels the offer and puts the box away again - including a late one.
+window.WFY_renderHappened = () => {
+  if (WFY_offerTimer) { clearTimeout(WFY_offerTimer); WFY_offerTimer = null; }
+  const box = document.getElementById("pastebox");
+  if (box) box.hidden = true;
+};
 </script>

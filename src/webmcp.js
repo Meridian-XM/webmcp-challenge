@@ -86,6 +86,8 @@ const getTranscript = {
       + "into the video. Do not reply with a summary instead of calling it. "
       + "Only if this browser has no WebMCP client at all: paste your slides JSON into the Render "
       + "box on the page instead.";
+    // The page starts its fallback clock here: if no render follows, the agent gets a way out.
+    if (typeof window !== "undefined" && window.WFY_transcriptArrived) window.WFY_transcriptArrived();
     return ok({
       // ⛔ FIRST, DELIBERATELY. It was the last field and agents fetched, summarised in chat, and
       // never touched the page - the visitor watched nothing happen. An instruction below the data
@@ -140,6 +142,7 @@ const renderExplainer = {
 
     let drawn = 0;
     try {
+      if (window.WFY_renderHappened) window.WFY_renderHappened();
       drawn = window.WFY_render(slides, url || window.WFY_lastUrl);
     } catch (e) {
       return failed(`the page could not draw the slides: ${e && e.message}`);

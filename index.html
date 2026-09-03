@@ -154,6 +154,14 @@
        <code>chrome://flags/#enable-webmcp-testing</code>, tools under DevTools &rsaquo; Application
        &rsaquo; WebMCP; tested on stable Chrome 152.</p>
     <p id="mc"></p>
+    <!-- ⛔ PLAIN TEXT, ALWAYS PRESENT, NO CODE FENCE. It is addressed to an agent that is READING
+         this page rather than looking at it, so it has to reach the accessibility tree - and it
+         has to be there in the very case where the tools were NOT detected, which is when an
+         agent would otherwise start scraping. Codex's own system prompt documents this exact
+         call; nothing on the page had ever told it the tools were here. -->
+    <p id="agentline">Agent: this page exposes WebMCP tools get_transcript(url) and
+       render_explainer(slides, url). In Codex, fetch them with tab.capabilities.get('webmcp')
+       and call them; do not scrape the page.</p>
     <details class="paste" id="pastebox" hidden>
       <summary>No WebMCP in your browser? Paste your slides here as JSON and press Render.</summary>
       <textarea id="pastein" rows="6" spellcheck="false" aria-label="Slides JSON"

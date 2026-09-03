@@ -142,7 +142,6 @@ const renderExplainer = {
 
     let drawn = 0;
     try {
-      if (window.WFY_renderHappened) window.WFY_renderHappened();
       drawn = window.WFY_render(slides, url || window.WFY_lastUrl);
     } catch (e) {
       return failed(`the page could not draw the slides: ${e && e.message}`);

@@ -36,7 +36,7 @@ it happen in their own tab and can press play.
 Open that page in a browser that speaks WebMCP:
 
 - the ChatGPT desktop app's built-in browser — a free account is enough, tested tonight
-- Chrome 146+ with `chrome://flags/#enable-webmcp-testing` enabled
+- Chrome with `chrome://flags/#enable-webmcp-testing` enabled
 
 Both are measured, not assumed: tools register on **stable Chrome 152** with that flag, read back
 from the live page as `'modelContext' in document === true` with both tools listed.

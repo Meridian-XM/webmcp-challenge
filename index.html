@@ -106,6 +106,18 @@
        color:var(--muted);white-space:nowrap}
   @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto !important;transition:none !important}}
 </style>
+<link rel="icon" href="/tldw/icon-32.png" sizes="32x32" type="image/png">
+<link rel="icon" href="/tldw/icon-512.png" sizes="512x512" type="image/png">
+<link rel="apple-touch-icon" href="/tldw/icon-180.png">
+<meta property="og:title" content="TLDW - Watch For You">
+<meta property="og:description" content="Too long; didn't watch. Made for your AI: it reads the captions and draws an explainer on this page.">
+<meta property="og:image" content="https://meridianxm.com/tldw/icon-512.png">
+<meta property="og:url" content="https://meridianxm.com/tldw">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TLDW - Watch For You">
+<meta name="twitter:description" content="Too long; didn't watch. Made for your AI: it reads the captions and draws an explainer on this page.">
+<meta name="twitter:image" content="https://meridianxm.com/tldw/icon-512.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,600;1,6..72,400&display=swap">
@@ -150,7 +162,7 @@
 
   <div class="tools">
     <p>An agent in this tab sees two tools: <code>get_transcript</code> and
-       <code>render_explainer</code>. Chrome 146+ with
+       <code>render_explainer</code>. Chrome with
        <code>chrome://flags/#enable-webmcp-testing</code>, tools under DevTools &rsaquo; Application
        &rsaquo; WebMCP; tested on stable Chrome 152.</p>
     <p id="mc"></p>
@@ -210,6 +222,7 @@ const say = (m) => { $("status").textContent = m; };
 
 // The page's half of the contract with src/webmcp.js. Renamed here and the wiring
 // silently does nothing, so these two names are load-bearing.
+let WFY_fromPaste = false;     // set only while the paste box is driving the renderer
 window.WFY_render = (slides, url) => {
   if (url) window.WFY_slidesUrl = url;
   const box = $("slides");
@@ -242,7 +255,20 @@ window.WFY_render = (slides, url) => {
   }
   // ⛔ THE PLAYER ARMS FROM THE DRAW. Anything that goes wrong in the speech half after this
   // cannot leave a page full of slides with an empty queue behind it.
-  try { window.WFY_arm(slides); } catch (e) { /* a draw must never fail because arming did */ }
+  // ⛔ SUPPRESSION BELONGS TO A SUCCESSFUL DRAW, NOT TO THE CALL THAT ATTEMPTED ONE. It used to
+  // fire in the tool handler BEFORE WFY_render, so a render that THREW still hid the fallback and
+  // cancelled its timer - the agent got a failure and lost its way out for the rest of the session.
+  // Here it runs only after the draw has actually happened.
+  // ⇒ AND THE PASTE BOX IS EXEMPT: a person who just used it may want to paste again, so a draw
+  // THEY caused must not put the box away underneath them.
+  try { window.WFY_arm(slides); } catch (e) {
+    // ⛔ NOT SWALLOWED. Two other arm paths cover the feature, so this costs a DIAGNOSTIC rather
+    // than the function - which is exactly why an empty catch here would have been invisible.
+    // Say it on the bar and in the console, so the next person sees what the page saw.
+    try { setSt(`slides drawn, but the player could not arm: ${e && e.message}`); } catch (e2) {}
+    try { console.error("WFY_arm failed after a successful draw:", e); } catch (e2) {}
+  }
+  if (!WFY_fromPaste && window.WFY_renderHappened) window.WFY_renderHappened();
   return slides.length;
 };
 
@@ -744,14 +770,17 @@ $("pasterender").onclick = () => {
   // happened, to the audience this box exists for. `render_explainer` already had it right:
   // "Speech is a bonus, never the verdict."
   let n;
+  WFY_fromPaste = true;
   try {
     n = window.WFY_render(slides, url || window.WFY_lastUrl);
   } catch (e) {
+    WFY_fromPaste = false;
     // ⛔ NEVER SILENT. This box exists because something else failed; failing quietly here would
     // leave the agent with no way to tell a bad paste from a broken page.
     msg.textContent = `could not draw: ${e && e.message}`;
     return;
   }
+  WFY_fromPaste = false;
   let spoken = "";
   try {
     window.WFY_speak(slides);

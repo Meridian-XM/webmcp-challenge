@@ -284,6 +284,16 @@ let WFY_voiceLocked = false;          // set once the listener chooses for thems
 // The dropdown holds one entry that is NOT a SpeechSynthesisVoice. A sentinel rather than a name,
 // so it can never collide with a real voice the browser happens to ship.
 const WFY_NEURAL = "__wfy_neural_female__";
+const WFY_NEURAL_M = "__wfy_neural_male__";
+// ⛔ THE VOICE IS PART OF THE CACHE KEY, NOT A DISPLAY CHOICE. The renderer stores by
+// (voice_key, sha256 of the normalised text) and the audio path is /tldw/api/tts/<voice>/<hash>.mp3,
+// so switching voice invalidates every render already in flight for this page. WFY_pending is keyed
+// by SLIDE INDEX ALONE, which is correct while the voice is fixed and WRONG the moment it is not:
+// without clearing it, a listener who switches hears the OLD voice from the memo and no request is
+// ever made for the new one. Values are read from content.tts_voices, not invented:
+//   voice_69  the female default the worker falls back to
+//   voice_12  en_GB-vctk-medium speaker 23, "GB male (vctk 23)", active
+let WFY_neuralVoice = "voice_69";
 let WFY_neural = false;               // false until a human picks it; nothing below runs otherwise
 let WFY_slideTexts = [];              // per SLIDE, not per chunk: one render job per slide
 function showVoice() {
@@ -298,7 +308,9 @@ function showVoice() {
   // Disabling it there hid the one option that works from the only people who need it. Caught by
   // driving the page, not by reading it: the markup looked correct.
   el.disabled = false;
-  const want = WFY_neural ? WFY_NEURAL : (WFY_voice && WFY_voice.name);
+  const want = WFY_neural
+    ? (WFY_neuralVoice === "voice_69" ? WFY_NEURAL : WFY_NEURAL_M)
+    : (WFY_voice && WFY_voice.name);
   // Rebuilt rather than appended to: voiceschanged can fire repeatedly and the remote voices
   // arrive late, so an append-only list shows the same voice several times.
   // ⛔ FIRST IN THE LIST AND NEVER PRE-SELECTED. It is a different mechanism from every other
@@ -311,9 +323,14 @@ function showVoice() {
   // whenever the neural entry does not. Where the browser has no voices it says so plainly
   // instead of silently pretending there is one.
   const sysLabel = list.length ? "System voice" : "System voice - none in this browser";
+  // ⛔ BOTH NEURAL ENTRIES CARRY `selected` FROM THE SAME `want`, so a rebuild of this list (it is
+  // rebuilt on every voiceschanged event) cannot silently move a listener off the one they picked.
+  const neuralPicked = want === WFY_NEURAL || want === WFY_NEURAL_M;
   const head = `<option value="${WFY_NEURAL}"${want === WFY_NEURAL ? " selected" : ""}>`
     + `Experimental - neural female</option>`
-    + `<option value="__wfy_system__"${want === WFY_NEURAL ? "" : " selected"}>`
+    + `<option value="${WFY_NEURAL_M}"${want === WFY_NEURAL_M ? " selected" : ""}>`
+    + `Experimental - neural male</option>`
+    + `<option value="__wfy_system__"${neuralPicked ? "" : " selected"}>`
     + `${sysLabel}</option>`;
   // With no browser voices at all the list is empty and the neural entry stands alone - correct,
   // and it must still be selectable.
@@ -322,7 +339,16 @@ function showVoice() {
     + `${v.name}</option>`).join("");
 }
 document.getElementById("rab-voice").onchange = (e) => {
-  if (e.target.value === WFY_NEURAL) {
+  if (e.target.value === WFY_NEURAL || e.target.value === WFY_NEURAL_M) {
+    const picked = e.target.value === WFY_NEURAL_M ? "voice_12" : "voice_69";
+    // ⛔ SWITCHING VOICE INVALIDATES THE MEMO. Renders are keyed by (voice, text) at the server and
+    // by slide index alone here, so a stale entry would play the PREVIOUS voice and never request
+    // the new one. Stop the loop and drop the map, exactly as a restart does.
+    if (picked !== WFY_neuralVoice) {
+      WFY_neuralVoice = picked;
+      WFY_neuralStop();
+      WFY_pending = {}; WFY_pendingWarm = {};
+    }
     WFY_neural = true;
     WFY_voiceLocked = true;
     // ⛔ WARM ON SELECTION, NOT ON ARRIVAL. Rendering for every visitor who never presses play
@@ -330,7 +356,7 @@ document.getElementById("rab-voice").onchange = (e) => {
     // a person who has asked for it, and buys back most of the first wait. Memoised, so pressing
     // play a moment later joins these same requests rather than starting new ones.
     if (WFY_slideTexts.length) { WFY_renderAudio(0, true); WFY_renderAudio(1, true); }
-    setSt("neural voice - press play");
+    setSt(picked === "voice_12" ? "neural male - press play" : "neural female - press play");
     return;
   }
   WFY_neural = false;
@@ -501,7 +527,7 @@ function loadBar(show, pct, txt) {
 async function ttsFetch(text, prewarm) {
   const r = await fetch(`${window.WFY_ENDPOINT || "/api"}/tts`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text, prewarm: !!prewarm }),
+    body: JSON.stringify({ text, prewarm: !!prewarm, voice: WFY_neuralVoice }),
   });
   if (!r.ok) throw new Error(`render queue HTTP ${r.status}`);
   return r.json();

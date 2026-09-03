@@ -329,7 +329,7 @@ document.getElementById("rab-voice").onchange = (e) => {
     // would spend a credit per page view; rendering when somebody CHOOSES this voice spends it on
     // a person who has asked for it, and buys back most of the first wait. Memoised, so pressing
     // play a moment later joins these same requests rather than starting new ones.
-    if (WFY_slideTexts.length) { WFY_renderAudio(0); WFY_renderAudio(1); }
+    if (WFY_slideTexts.length) { WFY_renderAudio(0, true); WFY_renderAudio(1, true); }
     setSt("neural voice - press play");
     return;
   }
@@ -466,6 +466,12 @@ let WFY_audio = null, WFY_nslide = 0, WFY_nstop = false, WFY_ntimer = null;
 let WFY_ngen = 0;
 let WFY_nrunning = false;     // a loop is in progress; a second press must not start another
 let WFY_pending = {};         // slide index -> in-flight render promise, memoised
+// ⛔ WHICH FLAG THE MEMOISED PROMISE WAS CREATED UNDER. Without this the memo silently wins:
+// the picker warms a slide as a PREWARM, the loop later asks for the same slide as a REAL
+// request, and WFY_renderAudio returns the existing promise and DROPS the new flag. Driven —
+// my first cut of this change posted prewarm:true on EVERY call including the awaited slide,
+// and the arm caught it because it asserts on the DECLARATION and not on the outcome.
+let WFY_pendingWarm = {};     // slide index -> was that promise created as a prewarm
 
 function loadBar(show, pct, txt) {
   const box = document.getElementById("rab-load");
@@ -483,10 +489,19 @@ function loadBar(show, pct, txt) {
   }
 }
 
-async function ttsFetch(text) {
+// ⛔ `prewarm` IS NOT A HINT, IT IS THE RATE LIMIT, AND THE QUEUE ALREADY IMPLEMENTS IT.
+// content.tts_request has taken p_max_pending (default 12) since before this page existed, and
+// its own comment says why the gate applies to PREWARMS ONLY: "a real request always queues:
+// someone is waiting on it." That reasoning is exact — and this page was breaking it, because it
+// declared EVERY call a real request, including the two neighbour prefetches nobody is waiting on.
+// Two of every three calls were lying about that, on a PUBLIC page, in front of a SERIAL renderer.
+// ⇒ So the fix is not a new limiter. It is to stop misdeclaring: the slide a listener is actually
+//   waiting on stays a real request and is NEVER refused; the neighbours become prewarms and are
+//   refused at depth. No new binding, no DDL, no second implementation of a check that exists.
+async function ttsFetch(text, prewarm) {
   const r = await fetch(`${window.WFY_ENDPOINT || "/api"}/tts`, {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, prewarm: !!prewarm }),
   });
   if (!r.ok) throw new Error(`render queue HTTP ${r.status}`);
   return r.json();
@@ -495,9 +510,13 @@ async function ttsFetch(text) {
 // Returns a URL, or null meaning "not in time" - which is NOT "it failed". The caller falls back
 // to the browser voice and SAYS SO, because a silent downgrade is indistinguishable from the
 // feature working badly.
-async function ttsWait(text, onProgress) {
+async function ttsWait(text, onProgress, prewarm) {
   const t0 = Date.now();
-  let j = await ttsFetch(text);
+  let j = await ttsFetch(text, prewarm);
+  // ⛔ A REFUSED PREWARM WAS NEVER QUEUED, SO POLLING IT IS A LOOP THAT CANNOT END WELL — it would
+  // spend the full 75s cap waiting for a job that does not exist. `queue_full` is a DECLINE, not a
+  // not-yet: return immediately and let the caller ask again when it is the awaited slide.
+  if (j.status === "queue_full") return null;
   while (!j.ready) {
     if (WFY_nstop) return null;
     const waited = Date.now() - t0;
@@ -506,7 +525,8 @@ async function ttsWait(text, onProgress) {
                `fetching the natural voice - about ${Math.max(1, Math.round((WFY_TTS_TIMEOUT_MS - waited) / 1000))}s left`);
     await new Promise((res) => { WFY_ntimer = setTimeout(res, 2000); });
     if (WFY_nstop) return null;
-    j = await ttsFetch(text);
+    j = await ttsFetch(text, prewarm);
+    if (j.status === "queue_full") return null;
   }
   return j.url;
 }
@@ -517,7 +537,7 @@ function WFY_neuralStop() {
   WFY_nrunning = false;
   if (WFY_ntimer) { clearTimeout(WFY_ntimer); WFY_ntimer = null; }
   if (WFY_audio) { try { WFY_audio.pause(); } catch (e) {} WFY_audio = null; }
-  WFY_pending = {};          // drop the prefetch map so a restart re-requests cleanly
+  WFY_pending = {}; WFY_pendingWarm = {};   // drop the prefetch map so a restart re-requests cleanly
   loadBar(false);
 }
 
@@ -525,7 +545,7 @@ function WFY_neuralStop() {
 // press, which is what "play and pause freaks out" looks like from the outside: a press could
 // start a second run of the same slide while the first was still in flight, and the two raced.
 // A slide is requested once; everyone who wants it awaits the same promise.
-function WFY_renderAudio(i) {
+function WFY_renderAudio(i, prewarm) {
   if (i < 0 || i >= WFY_slideTexts.length) return null;
   const text = WFY_slideTexts[i];
   if (!text) return null;
@@ -537,11 +557,14 @@ function WFY_renderAudio(i) {
     // the warm promise a listener is waiting on was already stale -> null url -> an instant
     // "neural too slow" and the neural voice unreachable on first play, every time.
     // A RENDER IS NOT OWNED BY A RUN. Only the LOOP needs an identity, and it has one.
+    // ⛔ MEMOISED, SO THE FIRST ASKER SETS THE FLAG. A prefetch that is later AWAITED must not stay
+    // a prewarm — see WFY_neuralPlay, which re-requests as a real request when it reaches the slide.
     WFY_pending[i] = ttsWait(text, (pct, msg) => {
       // Only the slide being WAITED ON drives the bar; a prefetch running behind must not
       // overwrite the progress of the one the listener is actually waiting for.
       if (i === WFY_nslide) loadBar(true, pct, msg);
-    }).catch(() => null);
+    }, prewarm).catch(() => null);
+    WFY_pendingWarm[i] = !!prewarm;
   }
   return WFY_pending[i];
 }
@@ -555,7 +578,7 @@ async function WFY_neuralPlay(startSlide) {
   WFY_nslide = startSlide;
   $("rab-play").innerHTML = "&#10073;&#10073;";
   // HEAD START: two slides requested before anything plays, so the first gap is the only gap.
-  WFY_renderAudio(startSlide); WFY_renderAudio(startSlide + 1);
+  WFY_renderAudio(startSlide, true); WFY_renderAudio(startSlide + 1, true);
   for (; WFY_nslide < WFY_slideTexts.length; WFY_nslide += 1) {
     if (stale()) return;           // superseded: the new run owns nrunning, do not clear it
     const text = WFY_slideTexts[WFY_nslide];
@@ -565,7 +588,13 @@ async function WFY_neuralPlay(startSlide) {
     if (!WFY_pending[WFY_nslide]) loadBar(true, 3, "fetching the natural voice...");
     let url = null;
     try {
-      url = await WFY_renderAudio(WFY_nslide);
+      // ⛔ THE AWAITED SLIDE IS A REAL REQUEST, AND THAT MUST HOLD BY CONSTRUCTION RATHER THAN BY
+      // RECOVERY. A promise created as a PREWARM is refusable at depth; someone is waiting on this
+      // one now, so discard the speculative one and ask again properly BEFORE awaiting it.
+      if (WFY_pendingWarm[WFY_nslide]) {
+        delete WFY_pending[WFY_nslide]; delete WFY_pendingWarm[WFY_nslide];
+      }
+      url = await WFY_renderAudio(WFY_nslide, false);
     } catch (e) {
       url = null;
       setSt(`neural unavailable: ${e.message}`);
@@ -574,8 +603,8 @@ async function WFY_neuralPlay(startSlide) {
     // not, and a listener skipping back paid the full render every time. Memoised, so warming a
     // slide that is already in flight costs nothing.
     if (stale()) return;           // superseded: do not even queue the neighbours
-    WFY_renderAudio(WFY_nslide + 1);
-    WFY_renderAudio(WFY_nslide - 1);
+    WFY_renderAudio(WFY_nslide + 1, true);
+    WFY_renderAudio(WFY_nslide - 1, true);
     if (WFY_nstop) { loadBar(false); WFY_nrunning = false; return; }
     if (!url) {
       // ⛔ LABELLED, ALWAYS. A fallback nobody can see is just the feature not working.

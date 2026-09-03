@@ -495,18 +495,17 @@ async function ttsFetch(text) {
 // Returns a URL, or null meaning "not in time" - which is NOT "it failed". The caller falls back
 // to the browser voice and SAYS SO, because a silent downgrade is indistinguishable from the
 // feature working badly.
-async function ttsWait(text, onProgress, stale) {
-  const dead = stale || (() => WFY_nstop);
+async function ttsWait(text, onProgress) {
   const t0 = Date.now();
   let j = await ttsFetch(text);
   while (!j.ready) {
-    if (dead()) return null;
+    if (WFY_nstop) return null;
     const waited = Date.now() - t0;
     if (waited > WFY_TTS_TIMEOUT_MS) return null;
     onProgress(Math.min(95, (waited / WFY_TTS_TIMEOUT_MS) * 100),
                `generating audio - about ${Math.max(1, Math.round((WFY_TTS_TIMEOUT_MS - waited) / 1000))}s left`);
     await new Promise((res) => { WFY_ntimer = setTimeout(res, 2000); });
-    if (dead()) return null;
+    if (WFY_nstop) return null;
     j = await ttsFetch(text);
   }
   return j.url;
@@ -526,17 +525,23 @@ function WFY_neuralStop() {
 // press, which is what "play and pause freaks out" looks like from the outside: a press could
 // start a second run of the same slide while the first was still in flight, and the two raced.
 // A slide is requested once; everyone who wants it awaits the same promise.
-function WFY_renderAudio(i, gen) {
+function WFY_renderAudio(i) {
   if (i < 0 || i >= WFY_slideTexts.length) return null;
   const text = WFY_slideTexts[i];
   if (!text) return null;
   if (!WFY_pending[i]) {
-    const g = (typeof gen === "number") ? gen : WFY_ngen;
+    // ⛔ NO RUN TOKEN ON THIS PROMISE, AND THE REASON IS A P0 IT ALREADY CAUSED. The map is
+    // MEMOISED, so the promise is created by whoever asks FIRST and awaited by everyone after.
+    // Giving it the requester's token makes it die for every LATER run: the voice picker warms
+    // slides 0 and 1 at selection time, then pressing play starts a run with a new token, and
+    // the warm promise a listener is waiting on was already stale -> null url -> an instant
+    // "neural too slow" and the neural voice unreachable on first play, every time.
+    // A RENDER IS NOT OWNED BY A RUN. Only the LOOP needs an identity, and it has one.
     WFY_pending[i] = ttsWait(text, (pct, msg) => {
       // Only the slide being WAITED ON drives the bar; a prefetch running behind must not
       // overwrite the progress of the one the listener is actually waiting for.
-      if (i === WFY_nslide && g === WFY_ngen) loadBar(true, pct, msg);
-    }, () => g !== WFY_ngen).catch(() => null);
+      if (i === WFY_nslide) loadBar(true, pct, msg);
+    }).catch(() => null);
   }
   return WFY_pending[i];
 }
@@ -550,7 +555,7 @@ async function WFY_neuralPlay(startSlide) {
   WFY_nslide = startSlide;
   $("rab-play").innerHTML = "&#10073;&#10073;";
   // HEAD START: two slides requested before anything plays, so the first gap is the only gap.
-  WFY_renderAudio(startSlide, gen); WFY_renderAudio(startSlide + 1, gen);
+  WFY_renderAudio(startSlide); WFY_renderAudio(startSlide + 1);
   for (; WFY_nslide < WFY_slideTexts.length; WFY_nslide += 1) {
     if (stale()) return;           // superseded: the new run owns nrunning, do not clear it
     const text = WFY_slideTexts[WFY_nslide];
@@ -560,7 +565,7 @@ async function WFY_neuralPlay(startSlide) {
     if (!WFY_pending[WFY_nslide]) loadBar(true, 3, "generating audio...");
     let url = null;
     try {
-      url = await WFY_renderAudio(WFY_nslide, gen);
+      url = await WFY_renderAudio(WFY_nslide);
     } catch (e) {
       url = null;
       setSt(`neural unavailable: ${e.message}`);
@@ -568,9 +573,9 @@ async function WFY_neuralPlay(startSlide) {
     // ALWAYS KEEP THE NEIGHBOURS WARM, BOTH OF THEM. Forward was already prefetched; BACKWARD was
     // not, and a listener skipping back paid the full render every time. Memoised, so warming a
     // slide that is already in flight costs nothing.
-    WFY_renderAudio(WFY_nslide + 1, gen);
-    WFY_renderAudio(WFY_nslide - 1, gen);
-    if (stale()) return;
+    if (stale()) return;           // superseded: do not even queue the neighbours
+    WFY_renderAudio(WFY_nslide + 1);
+    WFY_renderAudio(WFY_nslide - 1);
     if (WFY_nstop) { loadBar(false); WFY_nrunning = false; return; }
     if (!url) {
       // ⛔ LABELLED, ALWAYS. A fallback nobody can see is just the feature not working.

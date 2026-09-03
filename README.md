@@ -1,6 +1,6 @@
 # WebMCP Challenge entry
 
-In a world of AI there is too much noise, this is a simple tool to use that same AI to help cut through to get to the signal of you YouTube videos. 
+In a world of AI there is too much noise, this is a simple tool to use that same AI to help cut through to get to the signal of your YouTube videos. 
 
 - 100% Built with AI -
 

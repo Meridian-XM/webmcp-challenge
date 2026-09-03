@@ -1,0 +1,9 @@
+# Self-contained: this repo can be deployed by anyone with their own Cloudflare account.
+# The origin and secret are NOT in this file — they are set as worker secrets, so a public
+# repo never carries them.
+name = "wfy-watch"
+main = "index.js"
+compatibility_date = "2026-08-01"
+
+# Routes are attached at deploy time rather than declared here, so a fork of this repo does
+# not try to claim a zone it does not own.

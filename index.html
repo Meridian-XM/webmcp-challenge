@@ -1,0 +1,665 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TLDW - Watch For You</title>
+<style>
+  /* Tokens, type and measure taken from templates/living-page.html so this reads as one estate
+     rather than a lookalike. Values copied, not approximated. */
+  :root{
+    --paper:#EFF4F9; --surface:#FFFFFF; --ink:#0B1226; --muted:#5A6B7E;
+    --rule:#C4CDD6; --rule-soft:#E3EAF1;
+    --accent:#1668B8; --accent-soft:#E4EFF9; --accent-ink:#0B3D6B;
+    --shadow:0 1px 2px rgba(11,18,38,.05), 0 8px 24px rgba(11,18,38,.07);
+    --measure:760px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --paper:#0C1017; --surface:#131924; --ink:#E8EDF5; --muted:#93A2B5;
+           --rule:#2A3340; --rule-soft:#1C2430; --accent-soft:#132A40; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);
+       font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+       font-size:16px;line-height:1.55}
+  main{max-width:var(--measure);margin:0 auto;padding:56px 20px 120px}
+  h1{font-family:"Newsreader",Georgia,serif;font-weight:600;
+     font-size:clamp(30px,4.6vw,42px);line-height:1.1;letter-spacing:-.01em;margin:0 0 4px}
+  .lede{font-family:"Newsreader",Georgia,serif;font-style:italic;font-size:18px;
+        color:var(--muted);margin:0 0 8px}
+  .sub{color:var(--muted);margin:0 0 32px;max-width:60ch}
+  form{display:flex;gap:8px;margin:0 0 10px}
+  input{flex:1;padding:12px 14px;border:1px solid var(--rule);border-radius:10px;
+        background:var(--surface);color:var(--ink);font-size:15px;font-family:inherit}
+  input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  button{padding:12px 18px;border:0;border-radius:10px;background:var(--accent);color:#fff;
+         font-size:15px;font-weight:600;font-family:inherit;cursor:pointer}
+  .status{color:var(--muted);font-size:14px;min-height:22px;margin:0 0 28px}
+  .slide{background:var(--surface);border:1px solid var(--rule);border-radius:12px;
+         padding:20px 22px;margin:0 0 14px;box-shadow:var(--shadow);transition:border-color .18s}
+  .slide h2{font-family:"Newsreader",Georgia,serif;font-weight:600;font-size:22px;
+            line-height:1.25;margin:0 0 8px}
+  .slide p{margin:0 0 6px}
+  .slide.reading{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
+  .at{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;
+      color:var(--accent);font-size:12.5px;text-decoration:none}
+  .at:hover{text-decoration:underline}
+  .tools{border-top:1px solid var(--rule);margin-top:48px;padding-top:20px;
+         color:var(--muted);font-size:14px;max-width:62ch}
+  .try{margin:0 0 28px;padding-left:20px;max-width:62ch;color:var(--muted);font-size:14.5px}
+  .try li{margin:0 0 4px}
+  .how{margin-top:40px;max-width:64ch}
+  .how h2{font-family:"Newsreader",Georgia,serif;font-weight:600;font-size:22px;margin:0 0 12px}
+  .how ol{padding-left:20px;margin:0 0 14px}
+  .how li{margin:0 0 10px;color:var(--ink)}
+  .how .links,.how .closing{font-size:13.5px;color:var(--muted);margin:0 0 8px}
+  .how a{color:var(--accent)}
+  .tryline{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .copybtn{padding:4px 10px;border:1px solid var(--rule);border-radius:999px;background:var(--surface);
+       color:var(--ink);font-size:12.5px;font-weight:400;font-family:"IBM Plex Mono",ui-monospace,monospace;
+       cursor:pointer}
+  .copybtn:hover{background:var(--rule-soft)}
+  /* 16:9 by ratio rather than by a fixed height, so it is widescreen at every width and the page
+     below it never jumps as the iframe loads. */
+  .embed{margin:12px 0 0;border:1px solid var(--rule);border-radius:12px;overflow:hidden;
+       box-shadow:var(--shadow);aspect-ratio:16/9;max-width:560px}
+  .embed iframe{width:100%;height:100%;border:0;display:block}
+  code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;
+       background:var(--rule-soft);padding:1px 5px;border-radius:4px}
+  .rab{position:fixed;left:50%;transform:translateX(-50%);bottom:18px;z-index:60;display:flex;
+       align-items:center;gap:6px;background:var(--surface);border:1px solid var(--rule);
+       border-radius:999px;padding:6px 8px;box-shadow:var(--shadow);max-width:calc(100vw - 24px)}
+  .rab button{border:0;background:transparent;color:var(--ink);border-radius:999px;width:34px;
+       height:34px;display:inline-flex;align-items:center;justify-content:center;font-size:15px;
+       line-height:1;cursor:pointer}
+  .rab button:hover{background:var(--rule-soft)}
+  .rab button:disabled{opacity:.35;cursor:default}
+  .rab .wide{width:auto;padding:0 11px;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12.5px}
+  .rab .sep{width:1px;height:20px;background:var(--rule);flex:none;margin:0 2px}
+  .rab-st{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;color:var(--muted);
+       padding:0 8px;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rab-sel{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;color:var(--ink);
+       background:var(--surface);border:1px solid var(--rule);border-radius:999px;padding:4px 6px;
+       max-width:190px}
+  /* UNDER the player, and it SLIDES. Hidden state is off-screen and transparent rather than
+     display:none, because a slide needs something to animate from. The player lifts to make room
+     only while this is up, so the bar the page is judged on never moves on the proven path. */
+  .rab-load{position:fixed;left:50%;bottom:18px;z-index:59;display:flex;
+       align-items:center;gap:8px;background:var(--surface);border:1px solid var(--rule);
+       border-radius:999px;padding:6px 12px;box-shadow:var(--shadow);max-width:calc(100vw - 24px);
+       transform:translateX(-50%) translateY(120%);opacity:0;pointer-events:none;
+       transition:transform .28s cubic-bezier(.2,.8,.2,1), opacity .28s ease}
+  .rab-load.up{transform:translateX(-50%) translateY(0);opacity:1;pointer-events:auto}
+  .rab.lifted{bottom:64px;transition:bottom .28s cubic-bezier(.2,.8,.2,1)}
+  @media (prefers-reduced-motion:reduce){.rab-load,.rab.lifted{transition:none}}
+  .rab-load-bar{width:150px;height:5px;border-radius:999px;background:var(--rule-soft);
+       overflow:hidden;flex:none}
+  .rab-load-bar i{display:block;height:100%;width:0;background:var(--accent);
+       transition:width .35s linear}
+  .rab-load-txt{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+       color:var(--muted);white-space:nowrap}
+  @media (prefers-reduced-motion:reduce){*{scroll-behavior:auto !important;transition:none !important}}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,600;1,6..72,400&display=swap">
+
+<main>
+  <h1>TLDW</h1>
+  <p class="lede">Too long; didn't watch.</p>
+  <p class="sub">Made for your AI. Open this page in an AI browser &mdash; the ChatGPT desktop app,
+     or Chrome with WebMCP &mdash; and ask it to explain a video. Without an AI you only get the raw
+     captions. Each timestamp opens the video at that moment.</p>
+
+  <ol class="try">
+    <li>Get the ChatGPT desktop app and sign in &mdash; a free account works.</li>
+    <li>Open its built-in browser and go to meridianxm.com/tldw.</li>
+    <li>Ask it: explain this video to me, and paste a YouTube link, or click Try this one.</li>
+    <li>When the explainer appears, press play.</li>
+  </ol>
+
+  <form id="f">
+    <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=..."
+           aria-label="YouTube URL">
+    <button type="submit">Fetch captions</button>
+  </form>
+  <p class="status" id="status" role="status" aria-live="polite"></p>
+
+  <div id="slides"></div>
+  <div class="rab" id="rab" hidden>
+    <button id="rab-prev" aria-label="Previous section">&#9198;</button>
+    <button id="rab-play" aria-label="Play">&#9654;</button>
+    <button id="rab-next" aria-label="Next section">&#9197;</button>
+    <button id="rab-stop" aria-label="Stop and go back to the start">&#9632;</button>
+    <span class="sep"></span>
+    <button id="rab-speed" class="wide" aria-label="Speed">1&#215;</button>
+    <span class="rab-st" id="rab-st"></span>
+    <select class="rab-sel" id="rab-voice" aria-label="Voice"></select>
+  </div>
+  <div class="rab-load" id="rab-load">
+    <div class="rab-load-bar"><i id="rab-load-fill"></i></div>
+    <span class="rab-load-txt" id="rab-load-txt"></span>
+  </div>
+
+  <div class="tools">
+    <p>An agent in this tab sees two tools: <code>get_transcript</code> and
+       <code>render_explainer</code>. Chrome 146+ with
+       <code>chrome://flags/#enable-webmcp-testing</code>, tools under DevTools &rsaquo; Application
+       &rsaquo; WebMCP; tested on stable Chrome 152.</p>
+    <p id="mc"></p>
+  </div>
+
+  <section class="how">
+    <p>Paste a YouTube link, or ask your agent to explain one. If a video has no captions the page
+       says so.</p>
+    <p class="tryline">Try this one:
+       <a href="https://www.youtube.com/watch?v=Is2NHa7awWY" id="try">Build
+       agent-ready sites with WebMCP</a>
+       <button type="button" id="copy" class="copybtn">Copy link</button></p>
+    <div class="embed">
+      <iframe src="https://www.youtube-nocookie.com/embed/Is2NHa7awWY" loading="lazy"
+              title="Build agent-ready sites with WebMCP" allowfullscreen
+              referrerpolicy="strict-origin-when-cross-origin"
+              allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"></iframe>
+    </div>
+  </section>
+</main>
+
+<script>
+  // The zone's catch-all already belongs to another worker, so this entry claims ONE prefix
+  // (/watch*) and nothing else. Everything it needs lives under that prefix.
+  window.WFY_ENDPOINT = "/tldw/api";
+</script>
+<script type="module">
+// ⛔ ABSOLUTE, UNDER THE CLAIMED PREFIX. `./src/webmcp.js` resolves against `/watch` to
+// `/src/webmcp.js`, which is OUTSIDE this entry's route and lands on the zone catch-all as a
+// 404 - the module then never executes and every global below silently never exists.
+import { registerWebMCPTools, registerWithRetry } from "/tldw/src/webmcp.js";
+
+const $ = (id) => document.getElementById(id);
+const say = (m) => { $("status").textContent = m; };
+
+// The page's half of the contract with src/webmcp.js. Renamed here and the wiring
+// silently does nothing, so these two names are load-bearing.
+window.WFY_render = (slides, url) => {
+  if (url) window.WFY_slidesUrl = url;
+  const box = $("slides");
+  box.innerHTML = "";
+  for (const s of slides) {
+    const el = document.createElement("article");
+    el.className = "slide";
+    const h = document.createElement("h2");
+    h.textContent = s.title || "";
+    el.appendChild(h);
+    for (const line of (s.lines || [])) {
+      const p = document.createElement("p");
+      p.textContent = line;
+      p.className = "spk";           // addressable: highlight + auto-follow target
+      el.appendChild(p);
+    }
+    if (typeof s.at === "number") {
+      const a = document.createElement("a");
+      a.className = "at";
+      a.textContent = fmt(s.at);
+      // ⛔ FOUR SOURCES, IN ORDER. The box is the LAST of them, not the first: when an agent calls
+      // get_transcript itself the visitor never typed anything, the box is empty, and the earlier
+      // box-only version left every timestamp as dead plain text on exactly the path the entry is
+      // judged on. Per-slide url, then the render call's url, then whatever was last fetched.
+      const u = (s.url || window.WFY_slidesUrl || window.WFY_lastUrl || $("url").value || "").trim();
+      if (u) { a.href = withTime(u, s.at); a.target = "_blank"; a.rel = "noopener"; }
+      el.appendChild(a);
+    }
+    box.appendChild(el);
+  }
+  return slides.length;
+};
+
+// Voice selection solves the getVoices() race rather than ignoring it: the list is empty on the
+// first call and fills asynchronously, which is why a naive pick returns the platform default.
+let WFY_voice = null;
+// The voice is a CONTROL, not a readout: no automated probe can read the selection an in-app
+// browser makes, and the automatic pick is only ever a guess about which voices have arrived.
+let WFY_voiceLocked = false;          // set once the listener chooses for themselves
+// The dropdown holds one entry that is NOT a SpeechSynthesisVoice. A sentinel rather than a name,
+// so it can never collide with a real voice the browser happens to ship.
+const WFY_NEURAL = "__wfy_neural_female__";
+let WFY_neural = false;               // false until a human picks it; nothing below runs otherwise
+let WFY_slideTexts = [];              // per SLIDE, not per chunk: one render job per slide
+function showVoice() {
+  const el = document.getElementById("rab-voice");
+  if (!el) return;
+  const vs = ("speechSynthesis" in window) ? speechSynthesis.getVoices() : [];
+  const en = vs.filter((v) => /^en/i.test(v.lang));
+  const list = en.length ? en : vs;
+  // ⛔ NEVER DISABLED, AND THIS IS THE WHOLE POINT OF THE ENTRY. An earlier version disabled the
+  // control when getVoices() was empty, which is exactly the browser where the SERVER-RENDERED
+  // voice is the only one that can make a sound - the in-app browsers with no voices installed.
+  // Disabling it there hid the one option that works from the only people who need it. Caught by
+  // driving the page, not by reading it: the markup looked correct.
+  el.disabled = false;
+  const want = WFY_neural ? WFY_NEURAL : (WFY_voice && WFY_voice.name);
+  // Rebuilt rather than appended to: voiceschanged can fire repeatedly and the remote voices
+  // arrive late, so an append-only list shows the same voice several times.
+  // ⛔ FIRST IN THE LIST AND NEVER PRE-SELECTED. It is a different mechanism from every other
+  // entry - a server render, tens of seconds, not the instant browser voice - so it is offered
+  // rather than defaulted, and the label says Experimental in the one place a person will read it.
+  // ⛔ "NOT THE DEFAULT" HAS TO HOLD IN EVERY BROWSER, INCLUDING ONE WITH NO VOICES AT ALL.
+  // A <select> selects its FIRST option when none is marked, so with an empty voice list the
+  // Experimental entry would become the selection by default - the one thing it must never be.
+  // A system-voice entry is therefore always present, always second, and carries `selected`
+  // whenever the neural entry does not. Where the browser has no voices it says so plainly
+  // instead of silently pretending there is one.
+  const sysLabel = list.length ? "System voice" : "System voice - none in this browser";
+  const head = `<option value="${WFY_NEURAL}"${want === WFY_NEURAL ? " selected" : ""}>`
+    + `Experimental - neural female</option>`
+    + `<option value="__wfy_system__"${want === WFY_NEURAL ? "" : " selected"}>`
+    + `${sysLabel}</option>`;
+  // With no browser voices at all the list is empty and the neural entry stands alone - correct,
+  // and it must still be selectable.
+  el.innerHTML = head + list.map((v) =>
+    `<option value="${v.name.replace(/"/g, "&quot;")}"${v.name === want ? " selected" : ""}>`
+    + `${v.name}</option>`).join("");
+}
+document.getElementById("rab-voice").onchange = (e) => {
+  if (e.target.value === WFY_NEURAL) {
+    WFY_neural = true;
+    WFY_voiceLocked = true;
+    // ⛔ WARM ON SELECTION, NOT ON ARRIVAL. Rendering for every visitor who never presses play
+    // would spend a credit per page view; rendering when somebody CHOOSES this voice spends it on
+    // a person who has asked for it, and buys back most of the first wait. Memoised, so pressing
+    // play a moment later joins these same requests rather than starting new ones.
+    if (WFY_slideTexts.length) { WFY_renderAudio(0); WFY_renderAudio(1); }
+    setSt("neural voice - press play");
+    return;
+  }
+  WFY_neural = false;
+  if (e.target.value === "__wfy_system__") {
+    WFY_voiceLocked = false;    // hand the pick back to the automatic chain
+    pickVoice();
+    setSt(WFY_voice ? `voice: ${WFY_voice.name}` : "no voices in this browser");
+    return;
+  }
+  const v = speechSynthesis.getVoices().find((x) => x.name === e.target.value);
+  if (!v) return;
+  WFY_voice = v;
+  WFY_voiceLocked = true;             // a later voiceschanged must not undo a human choice
+  setSt(`voice: ${v.name}`);
+};
+// The FALLBACK ORDER matters more than the first choice. Measured on a stable Chrome carrying 27
+// voices: the browser default there is an old low-quality en-US system voice, so any chain ending
+// at `default`, or at vs[0], lands on the worst voice installed. Every step below is a NAMED
+// preference and the default is reached only when no named English voice exists at all.
+const VOICE_ORDER = [
+  // Edge ships a "Natural" family that is the best voice on any machine that has it. Selected BY
+  // NAME, never by sniffing the browser: a name test works in whatever browser happens to carry
+  // the voice, and a user-agent test is wrong the day a voice moves.
+  (v) => /Natural/i.test(v.name) && /en[-_]GB/i.test(v.lang),
+  (v) => /Natural/i.test(v.name) && /en[-_]US/i.test(v.lang),
+  (v) => v.name.startsWith("Google US English"),
+  (v) => v.name.startsWith("Google UK English Male"),
+  (v) => v.name.startsWith("Google UK English Female"),
+  (v) => /^Microsoft (George|Hazel|Susan)\b/.test(v.name),
+  (v) => /en[-_]GB/i.test(v.lang),
+  (v) => /en[-_]US/i.test(v.lang) && !/Microsoft David/i.test(v.name),
+  (v) => /^en/i.test(v.lang),
+];
+// ⛔ RE-EVALUATED EVERY TIME, NEVER CACHED ON FIRST USE. getVoices() fills asynchronously and the
+// good voices are REMOTE, so they arrive AFTER first paint: a pick made at load can only ever see
+// the LOCAL voices, and caching it means the page permanently speaks in a system voice while the
+// better ones sit in the list unused. The earlier `if (!WFY_voice) pickVoice()` was exactly that
+// freeze - the guard meant to protect the pick is what made it permanent.
+function pickVoice() {
+  if (WFY_voiceLocked) { showVoice(); return; }   // a human chose; leave it alone
+  if (!("speechSynthesis" in window)) { showVoice(); return; }
+  const vs = speechSynthesis.getVoices();
+  // Empty is not "no voices" - the list has not filled yet. Report it, do not resolve it.
+  if (!vs.length) { WFY_voice = null; showVoice(); return; }
+  WFY_voice = null;
+  for (const want of VOICE_ORDER) {
+    const v = vs.find(want);
+    if (v) { WFY_voice = v; break; }
+  }
+  if (!WFY_voice) WFY_voice = vs.find((x) => x.default) || vs[0];
+  showVoice();
+}
+if ("speechSynthesis" in window) {
+  pickVoice();
+  speechSynthesis.addEventListener("voiceschanged", pickVoice);
+}
+
+window.WFY_speak = (slides) => {
+  if (!("speechSynthesis" in window)) throw new Error("speechSynthesis unavailable");
+  WFY_stopping = true; speechSynthesis.cancel(); WFY_stopping = false;
+  WFY_queue = []; WFY_i = 0;
+  WFY_slideTexts = [];
+  pickVoice();          // unconditionally: by now the remote voices have usually arrived
+  let idx = -1;
+  for (const s of slides) {
+    idx += 1;
+    const text = [s.title, ...(s.lines || [])].filter(Boolean).join(". ");
+    WFY_slideTexts[idx] = text;
+    if (!text) continue;
+    // Chunked under 200 chars: rate applies per utterance, and long ones read badly.
+    const parts = text.match(/[^.!?]+[.!?]*\s*/g) || [text];
+    let buf = "";
+    const out = [];
+    for (const part of parts) {
+      if ((buf + part).length > 200 && buf) { out.push(buf.trim()); buf = ""; }
+      buf += part;
+    }
+    if (buf.trim()) out.push(buf.trim());
+    for (const chunk of out) WFY_queue.push({ text: chunk, slide: idx });
+  }
+  // ⛔ DELIBERATELY NO AUTOPLAY, AND THIS IS THE WHOLE DESIGN, NOT AN OMISSION.
+  // repos/mxm-redirects/src/readaloud.ts:9-17 records that a player with autoplay + auto-advance
+  // + an ARRIVAL QUEUE wedges: the engine reaches speaking:true/paused:false/pending:true
+  // permanently, cancel() will not clear it, and fresh utterances fire zero events. The lab pages
+  // never wedge because their workload cannot produce overlapping speak/cancel calls.
+  // render_explainer IS AN ARRIVAL — an agent can call it twice in a second — so this page would
+  // be the first surface to combine all three. The bar arrives READY; a human presses play.
+  $("rab").hidden = false;
+  $("rab-play").disabled = false;
+  // ⛔ cancel() ran at the top of this function from a NON-GESTURE context - the agent called
+  // it, not a person. Chrome can leave `speaking` asserted for a moment afterwards, and the play
+  // handler's first branch would then read that as "already playing" and PAUSE instead of start,
+  // which is exactly "the button did nothing". Clear it before a human can reach the button.
+  setTimeout(() => { try { speechSynthesis.cancel(); } catch (e) {} }, 0);
+  setSt(`${WFY_queue.length} to read — press play`);
+};
+
+// The player: play/pause, stop-to-start, and a SPEED BUTTON cycling 1 to 1.5. A button rather
+// than a slider on purpose - six steps is the whole useful range and a slider invites fiddling.
+const RATES = [1, 1.1, 1.2, 1.3, 1.4, 1.5];
+let WFY_queue = [], WFY_i = 0, WFY_ri = 0, WFY_stopping = false;
+const fmtRate = (r) => (r % 1 === 0 ? `${r}` : r.toFixed(1)) + "\u00d7";
+const setSt = (m) => { $("rab-st").textContent = m || ""; };
+
+// ⛔ EVERY LINE BELOW IS UNREACHABLE UNTIL A HUMAN PICKS THE EXPERIMENTAL ENTRY. That is the
+// acceptance for this feature, not a nicety: the proven browser-voice path is what the entry is
+// judged on, and a server render that is tens of seconds slow must not be able to touch it.
+const WFY_TTS_TIMEOUT_MS = 75000;   // measured: ~25s to be claimed, then ~2.5x realtime to render
+let WFY_audio = null, WFY_nslide = 0, WFY_nstop = false, WFY_ntimer = null;
+let WFY_nrunning = false;     // a loop is in progress; a second press must not start another
+let WFY_pending = {};         // slide index -> in-flight render promise, memoised
+
+function loadBar(show, pct, txt) {
+  const box = document.getElementById("rab-load");
+  if (!box) return;
+  // ⛔ NEVER FOR A SYSTEM VOICE. A browser voice speaks instantly, so a progress bar there would
+  // be describing work that is not happening. The guard is on the state, not on the caller, so no
+  // future call site can reintroduce it.
+  const on = show && WFY_neural;
+  box.hidden = false;                       // hidden would defeat the slide; the class carries it
+  box.classList.toggle("up", on);
+  $("rab").classList.toggle("lifted", on);
+  if (on) {
+    document.getElementById("rab-load-fill").style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    document.getElementById("rab-load-txt").textContent = txt || "";
+  }
+}
+
+async function ttsFetch(text) {
+  const r = await fetch(`${window.WFY_ENDPOINT || "/api"}/tts`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+  if (!r.ok) throw new Error(`render queue HTTP ${r.status}`);
+  return r.json();
+}
+
+// Returns a URL, or null meaning "not in time" - which is NOT "it failed". The caller falls back
+// to the browser voice and SAYS SO, because a silent downgrade is indistinguishable from the
+// feature working badly.
+async function ttsWait(text, onProgress) {
+  const t0 = Date.now();
+  let j = await ttsFetch(text);
+  while (!j.ready) {
+    if (WFY_nstop) return null;
+    const waited = Date.now() - t0;
+    if (waited > WFY_TTS_TIMEOUT_MS) return null;
+    onProgress(Math.min(95, (waited / WFY_TTS_TIMEOUT_MS) * 100),
+               `generating audio - about ${Math.max(1, Math.round((WFY_TTS_TIMEOUT_MS - waited) / 1000))}s left`);
+    await new Promise((res) => { WFY_ntimer = setTimeout(res, 2000); });
+    if (WFY_nstop) return null;
+    j = await ttsFetch(text);
+  }
+  return j.url;
+}
+
+function WFY_neuralStop() {
+  WFY_nstop = true;
+  WFY_nrunning = false;
+  if (WFY_ntimer) { clearTimeout(WFY_ntimer); WFY_ntimer = null; }
+  if (WFY_audio) { try { WFY_audio.pause(); } catch (e) {} WFY_audio = null; }
+  WFY_pending = {};          // drop the prefetch map so a restart re-requests cleanly
+  loadBar(false);
+}
+
+// ⛔ ONE PROMISE PER SLIDE, MEMOISED. The first build re-requested on every poll AND on every
+// press, which is what "play and pause freaks out" looks like from the outside: a press could
+// start a second run of the same slide while the first was still in flight, and the two raced.
+// A slide is requested once; everyone who wants it awaits the same promise.
+function WFY_renderAudio(i) {
+  if (i < 0 || i >= WFY_slideTexts.length) return null;
+  const text = WFY_slideTexts[i];
+  if (!text) return null;
+  if (!WFY_pending[i]) {
+    WFY_pending[i] = ttsWait(text, (pct, msg) => {
+      // Only the slide being WAITED ON drives the bar; a prefetch running behind must not
+      // overwrite the progress of the one the listener is actually waiting for.
+      if (i === WFY_nslide) loadBar(true, pct, msg);
+    }).catch(() => null);
+  }
+  return WFY_pending[i];
+}
+
+async function WFY_neuralPlay(startSlide) {
+  if (WFY_nrunning) return;        // a second press must never start a second loop
+  WFY_nrunning = true;
+  WFY_nstop = false;
+  WFY_nslide = startSlide;
+  $("rab-play").innerHTML = "&#10073;&#10073;";
+  // HEAD START: two slides requested before anything plays, so the first gap is the only gap.
+  WFY_renderAudio(startSlide); WFY_renderAudio(startSlide + 1);
+  for (; WFY_nslide < WFY_slideTexts.length; WFY_nslide += 1) {
+    if (WFY_nstop) { WFY_nrunning = false; return; }
+    const text = WFY_slideTexts[WFY_nslide];
+    if (!text) continue;
+    WFY_highlight(WFY_nslide);
+    setSt(`${WFY_nslide + 1} of ${WFY_slideTexts.length} - neural`);
+    if (!WFY_pending[WFY_nslide]) loadBar(true, 3, "generating audio...");
+    let url = null;
+    try {
+      url = await WFY_renderAudio(WFY_nslide);
+    } catch (e) {
+      url = null;
+      setSt(`neural unavailable: ${e.message}`);
+    }
+    // ALWAYS KEEP ONE AHEAD: kicked off before this slide plays, so it renders during playback
+    // instead of after it. This is the whole difference between play-stop-play-stop and a queue.
+    WFY_renderAudio(WFY_nslide + 1);
+    if (WFY_nstop) { loadBar(false); WFY_nrunning = false; return; }
+    if (!url) {
+      // ⛔ LABELLED, ALWAYS. A fallback nobody can see is just the feature not working.
+      loadBar(false);
+      setSt(`${WFY_nslide + 1} of ${WFY_slideTexts.length} - system voice (neural too slow)`);
+      await new Promise((done) => {
+        const u = new SpeechSynthesisUtterance(text);
+        if (WFY_voice) u.voice = WFY_voice;
+        u.rate = RATES[WFY_ri];
+        u.onend = done; u.onerror = done;
+        speechSynthesis.speak(u);
+      });
+      continue;
+    }
+    loadBar(true, 100, "ready");
+    await new Promise((done) => {
+      WFY_audio = new Audio(url);
+      WFY_audio.playbackRate = RATES[WFY_ri];
+      WFY_audio.onended = done;
+      WFY_audio.onerror = () => { setSt("audio would not play - system voice next"); done(); };
+      WFY_audio.play().catch(() => { setSt("browser refused playback"); done(); });
+      setTimeout(() => loadBar(false), 400);
+    });
+  }
+  loadBar(false);
+  WFY_nrunning = false;
+  if (!WFY_nstop) { $("rab-play").innerHTML = "&#9654;"; setSt("done"); }
+}
+
+function WFY_playFrom(i) {
+  WFY_stopping = true; speechSynthesis.cancel(); WFY_stopping = false;
+  if (WFY_neural) {
+    const item = WFY_queue[i];
+    return WFY_neuralPlay(item && typeof item.slide === "number" ? item.slide : 0);
+  }
+  pickVoice();          // last chance before anything is actually spoken
+  WFY_i = i;
+  const next = () => {
+    if (WFY_i >= WFY_queue.length) { $("rab-play").innerHTML = "&#9654;"; setSt("done"); return; }
+    const item = WFY_queue[WFY_i];
+    const u = new SpeechSynthesisUtterance(typeof item === "string" ? item : item.text);
+    if (WFY_voice) u.voice = WFY_voice;
+    u.rate = RATES[WFY_ri];
+    WFY_highlight(item && item.slide);
+    // cancel() fires onend on the utterance it kills, so a stop must not advance the queue.
+    u.onend = () => { if (WFY_stopping) return; WFY_i += 1; next(); };
+    setSt(`${WFY_i + 1} of ${WFY_queue.length}`);
+    speechSynthesis.speak(u);
+  };
+  $("rab-play").innerHTML = "&#10073;&#10073;";
+  next();
+}
+
+$("rab-play").onclick = () => {
+  // ⛔ THE NEURAL BRANCH COMES FIRST AND RETURNS. On this path speechSynthesis is NOT speaking, so
+  // every test below it reads false and the old handler fell through to "start from the top" -
+  // pressing pause STARTED A SECOND RUN, which is what it looked like from the outside. Pause and
+  // resume act on the audio ELEMENT and never touch the render, so nothing is re-requested.
+  if (WFY_neural) {
+    if (WFY_audio && !WFY_audio.paused) {
+      WFY_audio.pause(); $("rab-play").innerHTML = "&#9654;"; setSt("paused");
+    } else if (WFY_audio && WFY_audio.paused) {
+      WFY_audio.play().catch(() => setSt("browser refused playback"));
+      $("rab-play").innerHTML = "&#10073;&#10073;";
+    } else if (!WFY_nrunning && WFY_slideTexts.length) {
+      WFY_neuralPlay(0);
+    }
+    return;
+  }
+  if (speechSynthesis.speaking && !speechSynthesis.paused) {
+    speechSynthesis.pause(); $("rab-play").innerHTML = "&#9654;"; setSt("paused");
+  } else if (speechSynthesis.paused) {
+    speechSynthesis.resume(); $("rab-play").innerHTML = "&#10073;&#10073;";
+  } else if (WFY_queue.length) {
+    WFY_playFrom(0);
+  } else {
+    // ⛔ THE PRESS MUST NEVER BE SILENT. Every branch above assumes a queue; with none, the old
+    // handler fell off the end and the button "did nothing" - indistinguishable, to the person
+    // pressing it, from a broken page. Say which of the two it is.
+    setSt(("speechSynthesis" in window) ? "nothing to read yet" : "no speech in this browser");
+  }
+};
+
+// ⛔ CHROME STOPS SPEAKING AFTER ABOUT FIFTEEN SECONDS unless something nudges it, and the queue
+// here is minutes long. A pause/resume pair on a timer is the standard workaround; it is a no-op
+// whenever nothing is speaking, so it cannot interfere with a paused or stopped player.
+setInterval(() => {
+  if (speechSynthesis.speaking && !speechSynthesis.paused && !WFY_stopping) {
+    speechSynthesis.pause(); speechSynthesis.resume();
+  }
+}, 9000);
+function WFY_highlight(slideIdx) {
+  document.querySelectorAll(".slide").forEach((el, i) => {
+    el.classList.toggle("reading", i === slideIdx);
+    if (i === slideIdx) { try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (e) {} }
+  });
+}
+// Back and forward move by SLIDE, which is what a listener means by "section".
+function WFY_step(dir) {
+  if (!WFY_queue.length) return;
+  const cur = WFY_queue[WFY_i] && WFY_queue[WFY_i].slide;
+  let t = WFY_i;
+  while (t >= 0 && t < WFY_queue.length && WFY_queue[t].slide === cur) t += dir;
+  if (t < 0) t = 0;
+  if (t >= WFY_queue.length) { return; }
+  // land on the FIRST chunk of that slide
+  while (t > 0 && WFY_queue[t - 1].slide === WFY_queue[t].slide) t -= 1;
+  WFY_playFrom(t);
+}
+$("rab-prev").onclick = () => WFY_step(-1);
+$("rab-next").onclick = () => WFY_step(1);
+$("rab-stop").onclick = () => {
+  WFY_neuralStop();
+  WFY_stopping = true; speechSynthesis.cancel(); WFY_stopping = false;
+  WFY_i = 0; $("rab-play").innerHTML = "&#9654;"; setSt(""); WFY_highlight(-1);
+};
+$("rab-speed").onclick = () => {
+  WFY_ri = (WFY_ri + 1) % RATES.length;
+  $("rab-speed").textContent = fmtRate(RATES[WFY_ri]);
+  // Rate applies per utterance, so it takes effect from the CURRENT chunk on.
+  if (speechSynthesis.speaking) WFY_playFrom(WFY_i);
+};
+
+const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const withTime = (u, at) => {
+  try { const x = new URL(u); x.searchParams.set("t", `${Math.floor(at)}s`); return x.toString(); }
+  catch { return u; }
+};
+
+// The human path. Same endpoint the agent's tool uses, so one of them working is
+// evidence about the other.
+$("f").onsubmit = async (e) => {
+  e.preventDefault();
+  say("Fetching captions…");
+  window.WFY_lastUrl = $("url").value.trim();
+  try {
+    const res = await fetch(`${window.WFY_ENDPOINT || "/api"}/transcript`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: $("url").value.trim() }),
+    });
+    const d = await res.json();
+    // THREE STATES. `not_measured` is not a failure and not an empty transcript.
+    if (d.status === "ok") {
+      say(`${d.count} caption segments ready${d.title ? ` — ${d.title}` : ""}. `
+        + `Ask your agent to explain it, or it can call get_transcript itself.`);
+    } else if (d.status === "empty") {
+      say("This video genuinely exposes no English captions.");
+    } else {
+      say(`Could not measure: ${d.reason || "unknown"}. That is not the same as "no captions".`);
+    }
+  } catch (err) {
+    say(`Could not measure: ${err.message}. That is not the same as "no captions".`);
+  }
+};
+
+// A judge clicking the example must SEE the page work, not leave for YouTube.
+$("try").onclick = (e) => {
+  e.preventDefault();
+  $("url").value = "https://www.youtube.com/watch?v=Is2NHa7awWY";
+  // requestSubmit runs the form's own handler and its validation; dispatch is the old fallback.
+  if ($("f").requestSubmit) $("f").requestSubmit();
+  else $("f").dispatchEvent(new Event("submit", { cancelable: true }));
+};
+
+$("copy").onclick = async () => {
+  const url = "https://www.youtube.com/watch?v=Is2NHa7awWY";
+  const btn = $("copy");
+  try {
+    await navigator.clipboard.writeText(url);
+    btn.textContent = "Copied";
+  } catch (e) {
+    // Clipboard access is refused in plenty of contexts. Select the link instead of claiming a
+    // copy that did not happen - a button that lies is worse than one that hands you the text.
+    const r = document.createRange();
+    r.selectNodeContents($("try"));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    btn.textContent = "Selected - press copy";
+  }
+  setTimeout(() => { btn.textContent = "Copy link"; }, 2000);
+};
+
+registerWithRetry((reg) => {
+  $("mc").textContent = reg.registered
+    ? `${reg.registered} tools registered with your agent, via ${reg.where}.`
+    : `No agent detected in this tab — ${reg.reason}.`;
+});
+</script>

@@ -240,6 +240,9 @@ window.WFY_render = (slides, url) => {
     }
     box.appendChild(el);
   }
+  // ⛔ THE PLAYER ARMS FROM THE DRAW. Anything that goes wrong in the speech half after this
+  // cannot leave a page full of slides with an empty queue behind it.
+  try { window.WFY_arm(slides); } catch (e) { /* a draw must never fail because arming did */ }
   return slides.length;
 };
 
@@ -356,22 +359,30 @@ if (!!window.speechSynthesis) {
   speechSynthesis.addEventListener("voiceschanged", pickVoice);
 }
 
-window.WFY_speak = (slides) => {
-  if (!(!!window.speechSynthesis)) throw new Error("speechSynthesis unavailable");
-  WFY_stopping = true; speechSynthesis.cancel(); WFY_stopping = false;
-  WFY_queue = []; WFY_i = 0;
-  WFY_slideTexts = [];
-  pickVoice();          // unconditionally: by now the remote voices have usually arrived
+// ⛔ ARMING THE PLAYER IS NOW A SEPARATE ACT FROM SPEAKING, AND THAT IS THE FIX. It used to live
+// inside WFY_speak, so anything that made speak throw left the slides DRAWN and the queue EMPTY -
+// the bar then said "nothing to read yet" and pressing play did nothing, on a page that visibly
+// had seven slides on it. Measured on the principal's own screen. The player must arm from what
+// was DRAWN, never from whether the speech engine was willing.
+// ⇒ TOLERANT OF SLIDE SHAPE ON PURPOSE: a real agent sends `lines` as a string, an object, or
+// omits it. Spreading a non-iterable threw and took the whole queue with it.
+function WFY_lineText(s) {
+  if (!s) return "";
+  const raw = s.lines;
+  const lines = Array.isArray(raw) ? raw : (typeof raw === "string" && raw ? [raw] : []);
+  return [s.title, ...lines].filter((x) => typeof x === "string" && x.trim()).join(". ");
+}
+
+window.WFY_arm = (slides) => {
+  WFY_queue = []; WFY_i = 0; WFY_slideTexts = [];
   let idx = -1;
-  for (const s of slides) {
+  for (const s of (Array.isArray(slides) ? slides : [])) {
     idx += 1;
-    const text = [s.title, ...(s.lines || [])].filter(Boolean).join(". ");
+    const text = WFY_lineText(s);
     WFY_slideTexts[idx] = text;
     if (!text) continue;
-    // Chunked under 200 chars: rate applies per utterance, and long ones read badly.
     const parts = text.match(/[^.!?]+[.!?]*\s*/g) || [text];
-    let buf = "";
-    const out = [];
+    let buf = ""; const out = [];
     for (const part of parts) {
       if ((buf + part).length > 200 && buf) { out.push(buf.trim()); buf = ""; }
       buf += part;
@@ -379,6 +390,18 @@ window.WFY_speak = (slides) => {
     if (buf.trim()) out.push(buf.trim());
     for (const chunk of out) WFY_queue.push({ text: chunk, slide: idx });
   }
+  $("rab").hidden = false;
+  $("rab-play").disabled = false;
+  setSt(`${WFY_queue.length} to read — press play`);
+  return WFY_queue.length;
+};
+
+window.WFY_speak = (slides) => {
+  // Arming already happened at draw time; redo it only if something left us empty.
+  if (!WFY_queue.length) window.WFY_arm(slides);
+  if (!window.speechSynthesis) throw new Error("speechSynthesis unavailable");
+  WFY_stopping = true; speechSynthesis.cancel(); WFY_stopping = false;
+  pickVoice();          // unconditionally: by now the remote voices have usually arrived
   // ⛔ DELIBERATELY NO AUTOPLAY, AND THIS IS THE WHOLE DESIGN, NOT AN OMISSION.
   // repos/mxm-redirects/src/readaloud.ts:9-17 records that a player with autoplay + auto-advance
   // + an ARRIVAL QUEUE wedges: the engine reaches speaking:true/paused:false/pending:true
@@ -386,8 +409,6 @@ window.WFY_speak = (slides) => {
   // never wedge because their workload cannot produce overlapping speak/cancel calls.
   // render_explainer IS AN ARRIVAL — an agent can call it twice in a second — so this page would
   // be the first surface to combine all three. The bar arrives READY; a human presses play.
-  $("rab").hidden = false;
-  $("rab-play").disabled = false;
   // ⛔ cancel() ran at the top of this function from a NON-GESTURE context - the agent called
   // it, not a person. Chrome can leave `speaking` asserted for a moment afterwards, and the play
   // handler's first branch would then read that as "already playing" and PAUSE instead of start,
@@ -576,12 +597,39 @@ $("rab-play").onclick = () => {
     }
     return;
   }
+  // ⛔ NO SYSTEM VOICES AT ALL MEANS THE BROWSER PATH CANNOT MAKE A SOUND, so pressing play would
+  // do nothing and look broken. In that one condition the server-rendered voice is not a
+  // preference, it is the only thing that can speak - so switch to it and say so.
+  // DECIDED AT PLAY TIME, NOT AT LOAD, DELIBERATELY: getVoices() fills asynchronously and is
+  // legitimately empty for a moment on a browser that has plenty. By the time a human has pressed
+  // play the list has settled, so this cannot misfire during that race.
+  // ⇒ It does NOT make the neural voice the default anywhere a system voice exists, which is the
+  // thing that was asked for.
+  if (!WFY_neural && !WFY_voiceLocked && WFY_slideTexts.length
+      && (!window.speechSynthesis || speechSynthesis.getVoices().length === 0)) {
+    WFY_neural = true;
+    showVoice();
+    setSt("no system voice here, using neural");
+    WFY_neuralPlay(0);
+    return;
+  }
   if (speechSynthesis.speaking && !speechSynthesis.paused) {
     speechSynthesis.pause(); $("rab-play").innerHTML = "&#9654;"; setSt("paused");
   } else if (speechSynthesis.paused) {
     speechSynthesis.resume(); $("rab-play").innerHTML = "&#10073;&#10073;";
   } else if (WFY_queue.length) {
     WFY_playFrom(0);
+  } else if (document.querySelectorAll(".slide").length) {
+    // ⛔ REBUILD FROM WHAT IS ON SCREEN. If slides are visibly drawn, a person pressing play is
+    // entitled to hear them, whatever went wrong upstream. This is the belt to the draw-time
+    // brace above: neither is sufficient alone, and the failure they cover was invisible until
+    // it reached the principal's screen.
+    const fromDom = [...document.querySelectorAll(".slide")].map((el) => ({
+      title: (el.querySelector("h2") || {}).textContent || "",
+      lines: [...el.querySelectorAll("p.spk")].map((p) => p.textContent),
+    }));
+    if (window.WFY_arm(fromDom)) { WFY_playFrom(0); return; }
+    setSt("nothing to read yet");
   } else {
     // ⛔ THE PRESS MUST NEVER BE SILENT. Every branch above assumes a queue; with none, the old
     // handler fell off the end and the button "did nothing" - indistinguishable, to the person

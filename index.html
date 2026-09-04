@@ -144,6 +144,14 @@
            aria-label="YouTube URL">
     <button type="submit">Fetch captions</button>
   </form>
+  <!-- A preview of the video you pasted, under the input, so you can see it is the right one
+       before anything is fetched. Hidden until the field carries a recognisable id: an empty
+       16:9 box on load is furniture, and a broken one is worse. -->
+  <div class="embed" id="wfy-preview" hidden>
+    <iframe id="wfy-preview-frame" title="Preview of the video you pasted" loading="lazy"
+            allowfullscreen referrerpolicy="strict-origin-when-cross-origin"
+            allow="accelerometer; clipboard-write; encrypted-media; picture-in-picture"></iframe>
+  </div>
   <p class="status" id="status" role="status" aria-live="polite"></p>
   <p class="human" id="humanline" hidden></p>
 
@@ -226,6 +234,37 @@ const say = (m) => { $("status").textContent = m; };
 // The page's half of the contract with src/webmcp.js. Renamed here and the wiring
 // silently does nothing, so these two names are load-bearing.
 let WFY_fromPaste = false;     // set only while the paste box is driving the renderer
+
+// ── PREVIEW THE PASTED VIDEO ──────────────────────────────────────────────────────────────────
+// ⛔ EXTRACT AND SHAPE-CHECK, NEVER INTERPOLATE THE RAW FIELD. This value becomes an iframe src,
+//   so an unchecked one is an injection into a URL. The alphabet is the same 11-character shape
+//   the worker and the caption service already enforce, so a value that passes here passes there
+//   - one shape for this id at every layer rather than three that drift apart.
+function wfyPreviewId(v){
+  var m = String(v || "").match(/(?:v=|youtu\.be\/|\/shorts\/|\/embed\/)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
+function wfyPreview(){
+  var box = document.getElementById("wfy-preview");
+  var frame = document.getElementById("wfy-preview-frame");
+  var input = document.getElementById("url");
+  if (!box || !frame || !input) return;
+  var id = wfyPreviewId(input.value);
+  if (!id){
+    // HIDDEN AND EMPTIED, not just hidden: a src left behind keeps the previous video loaded and
+    // it would reappear the moment anything unhides the box.
+    box.hidden = true;
+    if (frame.getAttribute("src")) frame.removeAttribute("src");
+    return;
+  }
+  // youtube-nocookie, matching the embed below: a preview must not be a quieter tracking surface
+  // than the thing beside it.
+  var want = "https://www.youtube-nocookie.com/embed/" + id;
+  // Only touch src when it actually changes - reassigning the same URL reloads the iframe and
+  // restarts the video under someone who is still typing.
+  if (frame.getAttribute("src") !== want) frame.setAttribute("src", want);
+  box.hidden = false;
+}
 window.WFY_render = (slides, url) => {
   if (url) window.WFY_slidesUrl = url;
   const box = $("slides");
@@ -807,6 +846,14 @@ const withTime = (u, at) => {
 
 // The human path. Same endpoint the agent's tool uses, so one of them working is
 // evidence about the other.
+// input AND paste: `input` covers typing and most pastes, but a right-click paste in some
+// browsers fires only `paste`, and that one arrives BEFORE the value updates - hence the
+// 0ms defer rather than reading it inline.
+(function(){ var u = document.getElementById("url"); if (!u) return;
+  u.addEventListener("input", wfyPreview);
+  u.addEventListener("paste", function(){ setTimeout(wfyPreview, 0); });
+  wfyPreview();   // a value restored by the browser on reload must show its preview too
+})();
 $("f").onsubmit = async (e) => {
   e.preventDefault();
   say("Fetching captions…");

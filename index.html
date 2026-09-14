@@ -142,7 +142,17 @@
   <form id="f">
     <input id="url" type="url" required placeholder="https://www.youtube.com/watch?v=..."
            aria-label="YouTube URL">
-    <button type="submit">Fetch captions</button>
+    <!-- ONE button, not two. The earlier split argued that a single button cannot report which
+         half failed; that concern is real and is answered in the STATUS TEXT rather than by a
+         second button, which reports "no captions", "could not measure" and "nothing drawn" as
+         distinct sentences.
+         This page deliberately does NOT call any hosted explainer. That route needs a signed-in,
+         allowlisted account, so an anonymous visitor pressing it would get a "not signed in"
+         refusal they have no way to act on. The button runs what a visitor can actually get: it
+         fetches the captions so an AI browser can draw the explainer on this page.
+         type=submit ON PURPOSE: with no submit button, Enter in a single-input form still fires
+         the form, so one code path serves both the mouse and the keyboard. -->
+    <button type="submit" id="explainbtn" title="Fetch the captions so your AI browser can draw the explainer">TLDW</button>
   </form>
   <!-- A preview of the video you pasted, under the input, so you can see it is the right one
        before anything is fetched. Hidden until the field carries a recognisable id: an empty
@@ -155,6 +165,30 @@
   <p class="status" id="status" role="status" aria-live="polite"></p>
   <p class="human" id="humanline" hidden></p>
 
+  <!-- Three placeholder tiles above the explainer output.
+       ⛔ PLACEHOLDERS ONLY, NEVER A MADE-UP SCORE. On a page whose whole pitch is that an AI
+          reads the captions for you, an invented number here would be the worst thing it could
+          say. Each tile gets a real measure or it keeps saying "coming soon".
+       ⛔ A SIBLING OF #slides, NOT INSIDE IT, AND THIS IS MEASURED RATHER THAN ASSUMED:
+          window.WFY_render does `box.innerHTML = ""` on #slides before appending, so the div is
+          cleared wholesale on every render. Tiles placed inside it would vanish the first time
+          somebody submitted a video — and would look perfectly fine until then.
+       Styled with the page's own custom properties (--surface/--rule/--ink/--muted), each
+       verified present in this file before use, so the tiles follow the theme with no new CSS. -->
+  <div id="tldw-verdict-tiles" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 0 28px">
+    <div style="background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px 16px">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:600;color:var(--ink)">Is it hype?</p>
+      <p style="margin:0;font-size:13px;color:var(--muted)">Coming soon</p>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px 16px">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:600;color:var(--ink)">Does it deliver on what it promises?</p>
+      <p style="margin:0;font-size:13px;color:var(--muted)">Coming soon</p>
+    </div>
+    <div style="background:var(--surface);border:1px solid var(--rule);border-radius:10px;padding:14px 16px">
+      <p style="margin:0 0 6px;font-size:14px;font-weight:600;color:var(--ink)">Fact check</p>
+      <p style="margin:0;font-size:13px;color:var(--muted)">Coming soon</p>
+    </div>
+  </div>
   <div id="slides"></div>
   <div class="rab" id="rab" hidden>
     <button id="rab-prev" aria-label="Previous section">&#9198;</button>
